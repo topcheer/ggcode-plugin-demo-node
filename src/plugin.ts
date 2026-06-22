@@ -189,7 +189,7 @@ function deserializeExecuteRequest(data: Buffer): {
             const fieldData = data.subarray(offset, offset + len);
             offset += len;
             if (fieldNum === 1) toolName = fieldData.toString("utf-8");
-            if (fieldNum === 2) input = fieldData;
+            if (fieldNum === 2) input = Buffer.from(fieldData);
         } else if (wireType === 0) {
             const { newOffset: off2 } = readVarint(data, offset);
             offset = off2;
@@ -215,64 +215,62 @@ function serve(): void {
 
     const server = new grpc.Server();
 
-    // Register ToolService with raw protobuf handlers
-    server.addService(
-        {
-            ListTools: {
-                path: "/ggcode.plugin.v1.ToolService/ListTools",
-                requestStream: false,
-                responseStream: false,
-                requestDeserialize: () => Buffer.alloc(0),
-                responseSerialize: (resp: Buffer) => resp,
-                handler: (_: any, callback: (err: any, resp: Buffer) => void) => {
-                    callback(null, serializeListToolsResponse(TOOLS));
-                },
-            },
-            Execute: {
-                path: "/ggcode.plugin.v1.ToolService/Execute",
-                requestStream: false,
-                responseStream: false,
-                requestDeserialize: (data: Buffer) => data,
-                responseSerialize: (resp: Buffer) => resp,
-                handler: (
-                    call: any,
-                    callback: (err: any, resp: Buffer) => void
-                ) => {
-                    const { toolName, input } = deserializeExecuteRequest(call.request);
-                    const result = executeTool(toolName, input);
-                    callback(null, serializeExecuteResponse(result));
-                },
-            },
-            Shutdown: {
-                path: "/ggcode.plugin.v1.ToolService/Shutdown",
-                requestStream: false,
-                responseStream: false,
-                requestDeserialize: () => Buffer.alloc(0),
-                responseSerialize: (resp: Buffer) => resp,
-                handler: (_: any, callback: (err: any, resp: Buffer) => void) => {
-                    callback(null, Buffer.alloc(0));
-                },
-            },
-        } as any,
-        {} as any
-    );
+    // Register ToolService — @grpc/grpc-js requires definition and implementation
+    // as two separate arguments (not combined into one object).
+    const toolServiceDef = {
+        ListTools: {
+            path: "/ggcode.plugin.v1.ToolService/ListTools",
+            requestStream: false,
+            responseStream: false,
+            requestDeserialize: () => Buffer.alloc(0),
+            responseSerialize: (resp: Buffer) => resp,
+        },
+        Execute: {
+            path: "/ggcode.plugin.v1.ToolService/Execute",
+            requestStream: false,
+            responseStream: false,
+            requestDeserialize: (data: Buffer) => data,
+            responseSerialize: (resp: Buffer) => resp,
+        },
+        Shutdown: {
+            path: "/ggcode.plugin.v1.ToolService/Shutdown",
+            requestStream: false,
+            responseStream: false,
+            requestDeserialize: () => Buffer.alloc(0),
+            responseSerialize: (resp: Buffer) => resp,
+        },
+    } as any;
+
+    server.addService(toolServiceDef, {
+        ListTools: (_: any, callback: (err: any, resp: Buffer) => void) => {
+            callback(null, serializeListToolsResponse(TOOLS));
+        },
+        Execute: (call: any, callback: (err: any, resp: Buffer) => void) => {
+            const { toolName, input } = deserializeExecuteRequest(call.request);
+            const result = executeTool(toolName, input);
+            callback(null, serializeExecuteResponse(result));
+        },
+        Shutdown: (_: any, callback: (err: any, resp: Buffer) => void) => {
+            callback(null, Buffer.alloc(0));
+        },
+    } as any);
 
     // Health service (go-plugin requires health checks)
-    server.addService(
-        {
-            Check: {
-                path: "/grpc.health.v1.Health/Check",
-                requestStream: false,
-                responseStream: false,
-                requestDeserialize: () => Buffer.alloc(0),
-                responseSerialize: (resp: Buffer) => resp,
-                handler: (_: any, callback: any) => {
-                    callback(null, Buffer.from([0x08, 0x01])); // SERVING
-                },
-            },
-        } as any,
-        {} as any
-    );
+    const healthServiceDef = {
+        Check: {
+            path: "/grpc.health.v1.Health/Check",
+            requestStream: false,
+            responseStream: false,
+            requestDeserialize: () => Buffer.alloc(0),
+            responseSerialize: (resp: Buffer) => resp,
+        },
+    } as any;
+
+    server.addService(healthServiceDef, {
+        Check: (_: any, callback: any) => {
+            callback(null, Buffer.from([0x08, 0x01])); // SERVING
+        },
+    } as any);
 
     server.bindAsync(
         `unix://${socketPath}`,
