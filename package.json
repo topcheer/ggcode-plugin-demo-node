@@ -1,0 +1,19 @@
+{
+  "name": "ggcode-plugin-demo-node",
+  "version": "1.0.0",
+  "description": "GGCode gRPC plugin demo in Node.js",
+  "main": "dist/plugin.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/plugin.js"
+  },
+  "dependencies": {
+    "@grpc/grpc-js": "^1.10.0",
+    "google-protobuf": "^3.25.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0",
+    "@types/node": "^20.11.0"
+  },
+  "license": "MIT"
+}
